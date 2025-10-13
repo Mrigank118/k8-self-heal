@@ -1,0 +1,15 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: k8-self-heal
+spec:
+  hosts:
+  - k8-self-heal
+  http:
+  - fault:
+      delay:
+        fixedDelay: 5s
+        percentage: 50
+    route:
+    - destination:
+        host: k8-self-heal
