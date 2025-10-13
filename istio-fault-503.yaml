@@ -1,0 +1,20 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: k8-self-heal
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - k8-self-heal-gateway
+  http:
+  - fault:
+      abort:
+        httpStatus: 503
+        percentage:
+          value: 50
+    route:
+    - destination:
+        host: k8-self-heal
+        port:
+          number: 3000
