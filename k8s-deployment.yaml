@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8-self-heal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8-self-heal
+  template:
+    metadata:
+      labels:
+        app: k8-self-heal
+    spec:
+      containers:
+        - name: k8-self-heal
+          image: mrigankwastaken/k8-self-heal:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            failureThreshold: 30
+            periodSeconds: 5
+
