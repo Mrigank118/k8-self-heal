@@ -1,131 +1,235 @@
 
+
 # Kubernetes Self-Healing Demonstration
 
 ## Overview
 
-This project demonstrates key self-healing capabilities of Kubernetes by deploying a containerized Node.js application instrumented with startup, liveness, and readiness probes. The application exposes endpoints that simulate common failure modes, allowing a controlled study of how Kubernetes detects, isolates, and remediates failures automatically.
+This project demonstrates core self-healing capabilities of Kubernetes using a containerized Node.js application. The system enables controlled failure scenarios to observe how Kubernetes reacts through automated restart, traffic withdrawal, and deferred readiness during slow startup conditions.
 
-The objective is to showcase how Kubernetes maintains application availability and reduces MTTR (Mean Time To Recovery) without manual intervention.
+The primary objective is to illustrate how Kubernetes maintains application availability and minimizes MTTR (Mean Time To Recovery) by leveraging built-in probes and container lifecycle management.
 
 ---
 
 ## Core Concepts Demonstrated
 
-### 1. Startup Probe
+### Startup Probe
 
-Certain applications require significant initialization time (e.g., data model load, warm cache, delayed dependency readiness). A `startupProbe` prevents Kubernetes from prematurely killing containers that are still booting.
-Only after the startup probe succeeds do liveness and readiness probes become active.
+Certain applications require extended initialization. `startupProbe` prevents premature restarts by disabling liveness/readiness checks until startup is complete.
 
-### 2. Liveness Probe
+### Liveness Probe
 
-A `livenessProbe` determines if the application is still functioning correctly. If it fails due to logical failure, deadlock, or internal corruption, Kubernetes automatically restarts the container to restore service availability.
+`livenessProbe` detects faulty or deadlocked applications. When the check fails, Kubernetes restarts the container to recover service.
 
-### 3. Readiness Probe
+### Readiness Probe
 
-A `readinessProbe` determines if the application is capable of serving traffic. When failing, Kubernetes stops routing traffic to the Pod but does not restart it. Readiness probes thereby protect the system from sending traffic to degraded instances.
+`readinessProbe` determines traffic availability. During failure, Pods are removed from endpoints while remaining alive. Kubernetes does not restart the container.
 
-### 4. Crash Recovery
+### Crash Recovery
 
-A dedicated endpoint intentionally terminates the process to simulate unexpected container failure. Kubernetes detects the exit and automatically provisions a replacement container.
+A dedicated route forces immediate process exit, demonstrating automatic Pod restart at the container runtime level.
 
 ---
 
-## Self-Healing Workflow Summary
+## Self-Healing Behavior Summary
 
-| Failure Mode                              | Probe Involved | Remediation                                |
-| ----------------------------------------- | -------------- | ------------------------------------------ |
-| Slow startup                              | startupProbe   | Container startup allowed without restarts |
-| Logical failure (deadlock, corrupt state) | livenessProbe  | Container restarted                        |
-| Temporary unavailability                  | readinessProbe | Removed from load balancer (no restart)    |
-| Application crash                         | N/A            | Pod restarted by kubelet / Deployment      |
+| Scenario                | Probe          | Result                                    |
+| ----------------------- | -------------- | ----------------------------------------- |
+| Slow startup            | startupProbe   | Pod allowed to initialize without restart |
+| Internal failure        | livenessProbe  | Container restarted                       |
+| Temporarily unavailable | readinessProbe | Pod removed from Service endpoints        |
+| Application crash       | N/A            | Container restarted by kubelet            |
 
 ---
 
 ## Application Endpoints
 
-| Path         | Behavior                                      |
-| ------------ | --------------------------------------------- |
-| `/`          | Base route; reflects readiness state          |
-| `/healthz`   | Health status for liveness and startup probes |
-| `/unhealthy` | Forces liveness failure                       |
-| `/notready`  | Forces readiness failure                      |
-| `/ready`     | Restores readiness                            |
-| `/crash`     | Simulates abrupt application crash            |
-
-The application transitions through health states based on probe responses, enabling controlled testing of Kubernetes self-healing behavior.
+| Path         | Description                              |
+| ------------ | ---------------------------------------- |
+| `/`          | Base route; responds only when ready     |
+| `/healthz`   | Health signal for liveness/startup       |
+| `/unhealthy` | Forces liveness failure                  |
+| `/notready`  | Forces readiness failure                 |
+| `/ready`     | Restores readiness                       |
+| `/crash`     | Terminates the process to simulate crash |
 
 ---
 
-## Startup Delay Simulation
+## Docker Image
 
-A delayed initialization period is built into the application to demonstrate protection provided by the startup probe. During this window, both readiness and liveness fail, but the container remains alive because only the startup probe governs behavior during boot.
+Public image on Docker Hub:
 
----
+```
+mrigankwastaken/k8-self-heal:latest
+```
 
-## Architecture
-
-* Node.js application
-* Docker container image hosted on Docker Hub
-* Kubernetes Deployment with:
-
-  * Startup probe
-  * Liveness probe
-  * Readiness probe
-* kubectl for deployment and observation
-
-The Deployment guarantees Pod replacement, while kubelet enforces container-level restart policies.
+You may use directly in Kubernetes deployments without building locally.
 
 ---
 
-## Expected Behavior
+## Deployment Architecture
 
-1. During startup, the container remains running even when `/healthz` fails until initialization completes.
-2. When liveness fails, Kubernetes restarts the container.
-3. When readiness fails, Kubernetes removes the Pod from service endpoints without restart.
-4. When `/crash` is invoked, Kubernetes automatically restarts the container.
-5. After restart, readiness and liveness return to normal and traffic resumes.
+* Node.js application wrapped in Docker
+* Deployment with:
+
+  * startupProbe
+  * livenessProbe
+  * readinessProbe
+* kubelet restartPolicy handling
+* Declarative state control via Deployment
+
+The Deployment guarantees Pod replacement. Kubelet enforces container restarts on failure.
 
 ---
 
-## Learning Outcomes
+# Running Steps
 
-This project highlights:
+## 1) Clone Repository
 
-* Kubernetes declarative reliability controls
-* Container-level process lifecycle management
-* Pod lifecycle behavior driven by probe health
-* Zero-touch remediation of common failure scenarios
-* Differentiation between traffic readiness and operational health
-* MTTR reduction and service continuity without manual action
+```
+git clone <repo_url>
+cd k8-self-heal
+```
+
+## 2) Ensure Kubernetes Cluster Is Running
+
+Start a local cluster (example: Minikube):
+
+```
+minikube start
+```
+
+Validate:
+
+```
+kubectl get nodes
+```
+
+## 3) Deploy to Kubernetes
+
+Your Deployment configuration should reference the provided image:
+
+```yaml
+image: mrigankwastaken/k8-self-heal:latest
+imagePullPolicy: Always
+```
+
+Apply deployment:
+
+```
+kubectl apply -f k8s-deployment.yaml
+```
+
+Verify:
+
+```
+kubectl get pods
+```
+
+Wait until:
+
+```
+2/2 Running
+```
+
+## 4) Port-Forward for Local Access
+
+```
+kubectl port-forward deployment/k8-self-heal 3000:3000
+```
+
+## 5) Test Endpoints
+
+### Verify Ready
+
+```
+curl localhost:3000
+```
+
+### Check Liveness
+
+```
+curl localhost:3000/healthz
+```
+
+### Make Unhealthy → triggers liveness restart
+
+```
+curl localhost:3000/unhealthy
+```
+
+### Make Not Ready → traffic blocked, no restart
+
+```
+curl localhost:3000/notready
+```
+
+### Restore readiness
+
+```
+curl localhost:3000/ready
+```
+
+### Crash the process → container restarts
+
+```
+curl localhost:3000/crash
+```
+
+Check restart count:
+
+```
+kubectl get pods
+```
+
+## 6) View Logs
+
+```
+kubectl logs -f deployment/k8-self-heal
+```
+
+---
+
+# Probe Behavior Validation
+
+### Startup Probe
+
+During initialization, `startupProbe` ensures Pod is not restarted even if `/healthz` fails. Liveness/readiness only begin after startup finishes.
+
+### Liveness Probe
+
+Upon `/unhealthy`, `/healthz` returns 500 → liveness fails → Pod restarts automatically → returns healthy.
+
+### Readiness Probe
+
+Upon `/notready`, traffic is stopped without restart. `/ready` restores traffic acceptance.
+
+### Crash
+
+`/crash` exits the process → kubelet restarts container → service restored.
 
 ---
 
 ## Key Takeaways
 
-* Startup probes prevent false restarts during long initialization.
-* Liveness probes enforce automatic recovery from broken states.
-* Readiness probes ensure only healthy Pods receive traffic.
-* Crash events are naturally remediated via restart policies.
-* Kubernetes natively implements automated fault tolerance mechanisms.
+* startupProbe prevents false restarts during initialization.
+* livenessProbe ensures automatic recovery after faults.
+* readinessProbe preserves availability by isolating degraded Pods.
+* Kubernetes natively applies resilient automation without operator intervention.
+* System demonstrates automated remediation of different failure classes.
 
 ---
 
-## Next Extensions
-
-Potential expansions:
+## Potential Extensions
 
 * Horizontal Pod Autoscaling (HPA)
-* Pod disruption budgets
-* Istio fault injection
-* Chaos engineering (Litmus, ChaosMesh)
-* Distributed tracing and metrics with Prometheus/Grafana
-* Canary rollouts and traffic splitting
+* Chaotic fault injection (Litmus / ChaosMesh)
+* Istio-based latency or abort injection
+* Tracing and metrics via Prometheus/Grafana
+* Multi-replica testing with Pod kill and drain scenarios
 
 ---
 
 ## Conclusion
 
-This project provides a controlled environment to study Kubernetes fault tolerance and automated remediation. By simulating failure conditions at application and container levels, it demonstrates how Kubernetes ensures service reliability by distinguishing between temporary unavailability and critical failure, preserving overall stability with minimal operator intervention.
-
----
+This project highlights the operational resilience that Kubernetes delivers through declarative configuration and runtime intelligence. By simulating controlled failures in a containerized workload, it demonstrates how Kubernetes distinguishes between transient unavailability and critical failure, applying appropriate remediation strategies with minimal intervention. This provides a framework for building highly available, fault-tolerant applications in production environments.
 
