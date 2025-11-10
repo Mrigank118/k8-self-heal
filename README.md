@@ -1,8 +1,3 @@
-Below is a **high-level, concise, advanced README** describing the full scope of your Kubernetes self-healing project.
-
-You may copy-paste directly into `README.md`.
-
----
 
 # Kubernetes Self-Healing Demonstration
 
