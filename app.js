@@ -4,6 +4,15 @@ const app = express();
 let healthy = true;
 let ready = true;
 
+const client = require('prom-client');
+client.collectDefaultMetrics();
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
+
+
 // Simulate slow startup 
 setTimeout(() => {
     console.log("Startup done!");

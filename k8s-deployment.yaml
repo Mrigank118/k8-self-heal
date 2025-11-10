@@ -11,6 +11,10 @@ spec:
     metadata:
       labels:
         app: k8-self-heal
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3000"
     spec:
       containers:
         - name: k8-self-heal
@@ -36,4 +40,3 @@ spec:
               port: 3000
             failureThreshold: 30
             periodSeconds: 5
-
