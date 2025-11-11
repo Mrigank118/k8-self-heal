@@ -1,235 +1,280 @@
 
 
-# Kubernetes Self-Healing Demonstration
+# Kubernetes Self-Healing and Fault-Injection Demonstration
 
-## Overview
+## 1. Overview
 
-This project demonstrates core self-healing capabilities of Kubernetes using a containerized Node.js application. The system enables controlled failure scenarios to observe how Kubernetes reacts through automated restart, traffic withdrawal, and deferred readiness during slow startup conditions.
-
-The primary objective is to illustrate how Kubernetes maintains application availability and minimizes MTTR (Mean Time To Recovery) by leveraging built-in probes and container lifecycle management.
+This project presents an implementation of fault-tolerant application behavior in Kubernetes using a containerized Node.js workload. It demonstrates automatic workload remediation via Kubernetes self-healing primitives and controlled failure injection using Istio service mesh. The system enables analysis of application availability and Mean Time To Recovery (MTTR) under both application-level and network-level fault conditions.
 
 ---
 
-## Core Concepts Demonstrated
+## 2. Self-Healing Capabilities
 
-### Startup Probe
+### 2.1 Startup Probe
 
-Certain applications require extended initialization. `startupProbe` prevents premature restarts by disabling liveness/readiness checks until startup is complete.
+`startupProbe` defers liveness/readiness evaluation until application initialization completes, preventing premature termination during slow startup.
 
-### Liveness Probe
+### 2.2 Liveness Probe
 
-`livenessProbe` detects faulty or deadlocked applications. When the check fails, Kubernetes restarts the container to recover service.
+`livenessProbe` monitors application health. Failure signals (e.g., `/unhealthy`) result in automatic container restart enforced by kubelet.
 
-### Readiness Probe
+### 2.3 Readiness Probe
 
-`readinessProbe` determines traffic availability. During failure, Pods are removed from endpoints while remaining alive. Kubernetes does not restart the container.
+`readinessProbe` controls traffic admission. When failing (e.g., `/notready`), the Pod is removed from Service endpoints but is not restarted. This preserves ongoing processes while preventing degraded instances from serving traffic.
 
-### Crash Recovery
+### 2.4 Crash Recovery
 
-A dedicated route forces immediate process exit, demonstrating automatic Pod restart at the container runtime level.
-
----
-
-## Self-Healing Behavior Summary
-
-| Scenario                | Probe          | Result                                    |
-| ----------------------- | -------------- | ----------------------------------------- |
-| Slow startup            | startupProbe   | Pod allowed to initialize without restart |
-| Internal failure        | livenessProbe  | Container restarted                       |
-| Temporarily unavailable | readinessProbe | Pod removed from Service endpoints        |
-| Application crash       | N/A            | Container restarted by kubelet            |
+A controlled `/crash` endpoint forces process termination. kubelet automatically reinstantiates the container via the deployment controller.
 
 ---
 
-## Application Endpoints
+## 3. Self-Healing Behavioral Matrix
 
-| Path         | Description                              |
+| Scenario              | Mechanism      | Result                               |
+| --------------------- | -------------- | ------------------------------------ |
+| Slow initialization   | startupProbe   | Pod permitted to complete startup    |
+| Internal malfunction  | livenessProbe  | Container restarted                  |
+| Temporary degradation | readinessProbe | Pod removed from routing; no restart |
+| Process termination   | kubelet        | Container restarted                  |
+
+---
+
+## 4. Application Endpoints
+
+| Endpoint     | Description                              |
 | ------------ | ---------------------------------------- |
-| `/`          | Base route; responds only when ready     |
-| `/healthz`   | Health signal for liveness/startup       |
+| `/`          | Base response; available only when Ready |
+| `/healthz`   | Liveness / Startup probe target          |
 | `/unhealthy` | Forces liveness failure                  |
 | `/notready`  | Forces readiness failure                 |
-| `/ready`     | Restores readiness                       |
-| `/crash`     | Terminates the process to simulate crash |
+| `/ready`     | Restores readiness state                 |
+| `/crash`     | Terminates process to simulate crash     |
 
 ---
 
-## Docker Image
-
-Public image on Docker Hub:
+## 5. Runtime Image
 
 ```
 mrigankwastaken/k8-self-heal:latest
 ```
 
-You may use directly in Kubernetes deployments without building locally.
+---
+
+## 6. Deployment Architecture
+
+The application is deployed as a Kubernetes Deployment backed by a ClusterIP Service. Probes and kubelet restart policy enforce resiliency guarantees. Istio augments network behavior by introducing controlled upstream-failure simulation via VirtualService rules.
+
+#### Components
+
+* Deployment (application + sidecar)
+* ClusterIP Service
+* Istio Gateway
+* Istio VirtualService
+* Probes (startup / liveness / readiness)
+* kubelet restart policy
 
 ---
 
-## Deployment Architecture
+## 7. Deployment Procedure
 
-* Node.js application wrapped in Docker
-* Deployment with:
+### 7.1 Cluster Initialization
 
-  * startupProbe
-  * livenessProbe
-  * readinessProbe
-* kubelet restartPolicy handling
-* Declarative state control via Deployment
-
-The Deployment guarantees Pod replacement. Kubelet enforces container restarts on failure.
-
----
-
-# Running Steps
-
-## 1) Clone Repository
-
-```
-git clone <repo_url>
-cd k8-self-heal
-```
-
-## 2) Ensure Kubernetes Cluster Is Running
-
-Start a local cluster (example: Minikube):
-
-```
+```bash
 minikube start
-```
-
-Validate:
-
-```
 kubectl get nodes
 ```
 
-## 3) Deploy to Kubernetes
+### 7.2 Deploy Application
 
-Your Deployment configuration should reference the provided image:
-
-```yaml
-image: mrigankwastaken/k8-self-heal:latest
-imagePullPolicy: Always
-```
-
-Apply deployment:
-
-```
+```bash
 kubectl apply -f k8s-deployment.yaml
-```
-
-Verify:
-
-```
+kubectl apply -f k8s-service.yaml
 kubectl get pods
 ```
 
-Wait until:
+Expected:
 
 ```
-2/2 Running
+2/2 Running   # App + Istio sidecar
 ```
 
-## 4) Port-Forward for Local Access
+### 7.3 Local Forwarding
 
-```
+(Optional)
+
+```bash
 kubectl port-forward deployment/k8-self-heal 3000:3000
 ```
 
-## 5) Test Endpoints
+---
 
-### Verify Ready
+## 8. Self-Healing Validation
 
-```
+### 8.1 Base Health
+
+```bash
 curl localhost:3000
-```
-
-### Check Liveness
-
-```
 curl localhost:3000/healthz
 ```
 
-### Make Unhealthy → triggers liveness restart
+### 8.2 Liveness Failure → Restart
 
-```
+```bash
 curl localhost:3000/unhealthy
-```
-
-### Make Not Ready → traffic blocked, no restart
-
-```
-curl localhost:3000/notready
-```
-
-### Restore readiness
-
-```
-curl localhost:3000/ready
-```
-
-### Crash the process → container restarts
-
-```
-curl localhost:3000/crash
-```
-
-Check restart count:
-
-```
 kubectl get pods
 ```
 
-## 6) View Logs
+### 8.3 Readiness Failure → Traffic Withdrawal
+
+```bash
+curl localhost:3000/notready
+curl localhost:3000/ready
+```
+
+### 8.4 Crash Recovery
+
+```bash
+curl localhost:3000/crash
+kubectl get pods
+```
+
+---
+
+## 9. MTTR Evaluation
+
+MTTR (Mean Time To Recovery) measures the time required for the system to return to a healthy Ready state following a real failure.
+
+### 9.1 Steps
+
+1. Monitor Pod lifecycle:
+
+   ```bash
+   kubectl get pods -w
+   ```
+2. Trigger failure:
+
+   ```bash
+   curl localhost:3000/crash
+   ```
+3. Record:
+
+   * Timestamp of failure
+   * Timestamp when replacement becomes `Ready`
+
+Example:
 
 ```
-kubectl logs -f deployment/k8-self-heal
+Failure:  14:22:10
+Ready:    14:22:38
+MTTR ≈ 28s
 ```
 
----
-
-# Probe Behavior Validation
-
-### Startup Probe
-
-During initialization, `startupProbe` ensures Pod is not restarted even if `/healthz` fails. Liveness/readiness only begin after startup finishes.
-
-### Liveness Probe
-
-Upon `/unhealthy`, `/healthz` returns 500 → liveness fails → Pod restarts automatically → returns healthy.
-
-### Readiness Probe
-
-Upon `/notready`, traffic is stopped without restart. `/ready` restores traffic acceptance.
-
-### Crash
-
-`/crash` exits the process → kubelet restarts container → service restored.
+> MTTR applies only to actual application-level failures (crash / failed liveness).
+> Network-level failures do **not** trigger restarts and therefore do not participate in MTTR.
 
 ---
 
-## Key Takeaways
+## 10. Fault Injection via Istio
 
-* startupProbe prevents false restarts during initialization.
-* livenessProbe ensures automatic recovery after faults.
-* readinessProbe preserves availability by isolating degraded Pods.
-* Kubernetes natively applies resilient automation without operator intervention.
-* System demonstrates automated remediation of different failure classes.
+Istio is utilized to inject controlled upstream failures to validate resilience under adverse network behavior.
+
+### 10.1 Gateway
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: k8-self-heal-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+```
+
+### 10.2 VirtualService (50% HTTP-503 injection)
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: k8-self-heal
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - k8-self-heal-gateway
+  http:
+  - fault:
+      abort:
+        httpStatus: 503
+        percentage:
+          value: 50
+    route:
+    - destination:
+        host: k8-self-heal
+        port:
+          number: 3000
+```
+
+### 10.3 Validation
+
+Determine ingress:
+
+```bash
+kubectl -n istio-system get svc istio-ingressgateway
+```
+
+Traffic test:
+
+```bash
+while true; do curl http://<MINIKUBE_IP>:<INGRESS_PORT>; sleep 1; done
+```
+
+Expected output alternates:
+
+```
+HTTP 200 (application response)
+HTTP 503 (fault-injected)
+```
+
+**No Pod restart occurs**.
+This validates proper separation between network-level degradation (handled by mesh) and application-level failures (handled by Kubernetes).
 
 ---
 
-## Potential Extensions
+## 11. System Behavior Summary
 
-* Horizontal Pod Autoscaling (HPA)
-* Chaotic fault injection (Litmus / ChaosMesh)
-* Istio-based latency or abort injection
-* Tracing and metrics via Prometheus/Grafana
-* Multi-replica testing with Pod kill and drain scenarios
+| Fault Type        | Triggered By | Pod Restart | MTTR Relevant |
+| ----------------- | ------------ | ----------- | ------------- |
+| Network abort     | Istio        | No          | No            |
+| App crash         | /crash       | Yes         | Yes           |
+| Liveness failure  | /unhealthy   | Yes         | Yes           |
+| Readiness failure | /notready    | No          | No            |
 
 ---
 
-## Conclusion
+## 12. Key Observations
 
-This project highlights the operational resilience that Kubernetes delivers through declarative configuration and runtime intelligence. By simulating controlled failures in a containerized workload, it demonstrates how Kubernetes distinguishes between transient unavailability and critical failure, applying appropriate remediation strategies with minimal intervention. This provides a framework for building highly available, fault-tolerant applications in production environments.
+* Probe-driven remediation ensures automatic restart upon application failure.
+* Readiness isolation prevents degraded Pods from serving traffic without restarting them.
+* Istio fault injection exercises service behavior under partial network outage without interfering with Pod health.
+* MTTR captures recovery time exclusively for true application disruptions.
+
+---
+
+## 13. Conclusion
+
+This implementation demonstrates how Kubernetes and Istio provide complementary resilience layers:
+
+* **Kubernetes self-healing** reconstitutes workload state automatically in response to internal failure.
+* **Istio fault injection** introduces deterministic failure scenarios at the traffic layer to validate behavioral robustness without destabilizing the underlying application.
+* **MTTR measurements** quantify recovery efficiency and can guide SLO establishment.
+
+Together, these capabilities form a robust foundation for reliable, fault-tolerant microservice platforms.
 
