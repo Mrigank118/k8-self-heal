@@ -87,9 +87,22 @@ kubectl get nodes
 ### 7.2 Deploy Application
 
 ```bash
-kubectl apply -f k8s-deployment.yaml
-kubectl apply -f k8s-service.yaml
-kubectl get pods
+kubectl apply -f k8s-deployment.yaml -n monitoring
+kubectl apply -f k8s-service.yaml -n monitoring
+kubectl apply -f k8s-gateway.yaml -n monitoring
+kubectl apply -f istio-delay.yaml -n monitoring
+kubectl apply -f istio-fault-503.yaml -n monitoring
+kubectl apply -f istio-hybrid.yaml -n monitoring
+kubectl apply -f prometheus-servicemonitor.yaml -n monitoring
+kubectl apply -f pushgateway.yaml -n monitoring
+kubectl apply -f k8s-prometheus.yaml -n monitoring
+kubectl apply -f k8s-grafana.yaml -n monitoring
+kubectl apply -f grafana-pvc.yaml -n monitoring
+kubectl apply -f vs.yaml -n monitoring
+kubectl apply -f vs-gw-fix.yaml -n monitoring
+kubectl apply -f mg.yaml -n monitoring
+kubectl get pods -n monitoring
+kubectl get svc -n monitoring
 ```
 
 Expected:
@@ -103,7 +116,9 @@ Expected:
 (Optional)
 
 ```bash
-kubectl port-forward deployment/k8-self-heal 3000:3000
+kubectl port-forward -n monitoring svc/k8-self-heal 3000:3000
+curl localhost:3000
+curl localhost:3000/healthz
 ```
 
 ---
@@ -121,7 +136,7 @@ curl localhost:3000/healthz
 
 ```bash
 curl localhost:3000/unhealthy
-kubectl get pods
+kubectl get pods -n monitoring
 ```
 
 ### 8.3 Readiness Failure → Traffic Withdrawal
@@ -137,14 +152,37 @@ curl localhost:3000/ready
 curl localhost:3000/crash
 kubectl get pods
 ```
+## 9 Monitoring MTTR with Prometheus & Grafana
+
+To visualize restart behavior, MTTR, and self-healing metrics, use Prometheus and Grafana.
 
 ---
 
-## 9. MTTR Evaluation
+### 9.1 Port-forward Prometheus UI
+
+```bash
+kubectl port-forward svc/prometheus-operated 9090:9090 -n monitoring
+
+Access in browser:
+
+➡️ http://localhost:9090
+
+---
+
+### 9.2 Port-forward Grafana Dashboard
+
+```bash
+kubectl port-forward svc/grafana 3001:80 -n monitoring
+Access in browser:
+
+➡️ http://localhost:3001
+```
+
+## 10. MTTR Evaluation
 
 MTTR (Mean Time To Recovery) measures the time required for the system to return to a healthy Ready state following a real failure.
 
-### 9.1 Steps
+### 10.1 Steps
 
 1. Monitor Pod lifecycle:
 
@@ -174,11 +212,11 @@ MTTR ≈ 28s
 
 ---
 
-## 10. Fault Injection via Istio
+## 11. Fault Injection via Istio
 
 Istio is utilized to inject controlled upstream failures to validate resilience under adverse network behavior.
 
-### 10.1 Gateway
+### 11.1 Gateway
 
 ```yaml
 apiVersion: networking.istio.io/v1alpha3
@@ -197,7 +235,7 @@ spec:
     - "*"
 ```
 
-### 10.2 VirtualService (50% HTTP-503 injection)
+### 11.2 VirtualService (50% HTTP-503 injection)
 
 ```yaml
 apiVersion: networking.istio.io/v1alpha3
@@ -222,7 +260,7 @@ spec:
           number: 3000
 ```
 
-### 10.3 Validation
+### 11.3 Validation
 
 Determine ingress:
 
@@ -248,7 +286,7 @@ This validates proper separation between network-level degradation (handled by m
 
 ---
 
-## 11. System Behavior Summary
+## 12. System Behavior Summary
 
 | Fault Type        | Triggered By | Pod Restart | MTTR Relevant |
 | ----------------- | ------------ | ----------- | ------------- |
@@ -259,7 +297,7 @@ This validates proper separation between network-level degradation (handled by m
 
 ---
 
-## 12. Key Observations
+## 13. Key Observations
 
 * Probe-driven remediation ensures automatic restart upon application failure.
 * Readiness isolation prevents degraded Pods from serving traffic without restarting them.
@@ -268,7 +306,7 @@ This validates proper separation between network-level degradation (handled by m
 
 ---
 
-## 13. Conclusion
+## 14. Conclusion
 
 This implementation demonstrates how Kubernetes and Istio provide complementary resilience layers:
 
