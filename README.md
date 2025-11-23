@@ -88,7 +88,9 @@ kubectl get nodes
 ```
 
 ### 7.2 Deploy Application
-
+```bash
+kubectl create namespace monitoring
+```
 ```bash
 kubectl apply -f k8s-deployment.yaml -n monitoring
 kubectl apply -f k8s-service.yaml -n monitoring
@@ -186,7 +188,9 @@ MTTR (Mean Time To Recovery) measures the time required for the system to return
 2. Trigger failure:
 
    ```bash
-   curl localhost:3000/crash
+   chmod +x mttr.sh
+   ./mttr.sh
+
    ```
 3. Record:
 
