@@ -81,6 +81,9 @@ The application is deployed as a Kubernetes Deployment backed by a ClusterIP Ser
 
 ```bash
 minikube start
+```
+
+```bash
 kubectl get nodes
 ```
 
@@ -101,8 +104,10 @@ kubectl apply -f grafana-pvc.yaml -n monitoring
 kubectl apply -f vs.yaml -n monitoring
 kubectl apply -f vs-gw-fix.yaml -n monitoring
 kubectl apply -f mg.yaml -n monitoring
+
 kubectl get pods -n monitoring
 kubectl get svc -n monitoring
+
 ```
 
 Expected:
@@ -113,14 +118,19 @@ Expected:
 
 ### 7.3 Local Forwarding
 
-(Optional)
+App
 
 ```bash
 kubectl port-forward -n monitoring svc/k8-self-heal 3000:3000
-curl localhost:3000
-curl localhost:3000/healthz
 ```
-
+Prometheus
+```bash
+kubectl port-forward svc/prometheus-operated 9090:9090 -n monitoring
+```
+Grafana
+```bash
+kubectl port-forward svc/grafana 3001:80 -n monitoring
+```
 ---
 
 ## 8. Self-Healing Validation
@@ -132,11 +142,17 @@ curl localhost:3000
 curl localhost:3000/healthz
 ```
 
+```bash
+curl localhost:3000/healthz
+```
+
 ### 8.2 Liveness Failure → Restart
 
 ```bash
 curl localhost:3000/unhealthy
-kubectl get pods -n monitoring
+```
+```bash
+curl localhost:3000/healthz
 ```
 
 ### 8.3 Readiness Failure → Traffic Withdrawal
@@ -150,44 +166,21 @@ curl localhost:3000/ready
 
 ```bash
 curl localhost:3000/crash
-kubectl get pods
-```
-## 9 Monitoring MTTR with Prometheus & Grafana
 
-To visualize restart behavior, MTTR, and self-healing metrics, use Prometheus and Grafana.
+```
 
 ---
 
-### 9.1 Port-forward Prometheus UI
-
-```bash
-kubectl port-forward svc/prometheus-operated 9090:9090 -n monitoring
-
-Access in browser:
-
-➡️ http://localhost:9090
-
----
-
-### 9.2 Port-forward Grafana Dashboard
-
-```bash
-kubectl port-forward svc/grafana 3001:80 -n monitoring
-Access in browser:
-
-➡️ http://localhost:3001
-```
-
-## 10. MTTR Evaluation
+## 9. MTTR Evaluation
 
 MTTR (Mean Time To Recovery) measures the time required for the system to return to a healthy Ready state following a real failure.
 
-### 10.1 Steps
+### 9.1 Steps
 
 1. Monitor Pod lifecycle:
 
    ```bash
-   kubectl get pods -w
+   kubectl get pods -n monitoring -w
    ```
 2. Trigger failure:
 
@@ -212,11 +205,11 @@ MTTR ≈ 28s
 
 ---
 
-## 11. Fault Injection via Istio
+## 10. Fault Injection via Istio
 
 Istio is utilized to inject controlled upstream failures to validate resilience under adverse network behavior.
 
-### 11.1 Gateway
+### 10.1 Gateway
 
 ```yaml
 apiVersion: networking.istio.io/v1alpha3
@@ -235,7 +228,7 @@ spec:
     - "*"
 ```
 
-### 11.2 VirtualService (50% HTTP-503 injection)
+### 10.2 VirtualService (50% HTTP-503 injection)
 
 ```yaml
 apiVersion: networking.istio.io/v1alpha3
@@ -260,7 +253,7 @@ spec:
           number: 3000
 ```
 
-### 11.3 Validation
+### 10.3 Validation
 
 Determine ingress:
 
@@ -271,7 +264,24 @@ kubectl -n istio-system get svc istio-ingressgateway
 Traffic test:
 
 ```bash
-while true; do curl http://<MINIKUBE_IP>:<INGRESS_PORT>; sleep 1; done
+while true; do
+  START=$(date +%s%3N)
+  RESP=$(curl -s -w "%{http_code}" -o /tmp/resp.txt http://192.168.49.2:31369)
+  END=$(date +%s%3N)
+  DIFF=$((END - START))
+  BODY=$(cat /tmp/resp.txt | sed -n 's/<[^>]*>//g;/./p' | head -n 1)  # strip HTML tags
+
+  if [ "$RESP" -eq 503 ]; then
+    printf "\e[31m[503 FAULT] %d ms\e[0m\n" "$DIFF"
+  elif [ "$DIFF" -gt 3000 ]; then
+    printf "\e[33m[DELAY %d ms] %s\e[0m\n" "$DIFF" "$BODY"
+  else
+    printf "\e[32m[OK %d ms] %s\e[0m\n" "$DIFF" "$BODY"
+  fi
+
+  sleep 1
+done
+
 ```
 
 Expected output alternates:
@@ -286,7 +296,7 @@ This validates proper separation between network-level degradation (handled by m
 
 ---
 
-## 12. System Behavior Summary
+## 11. System Behavior Summary
 
 | Fault Type        | Triggered By | Pod Restart | MTTR Relevant |
 | ----------------- | ------------ | ----------- | ------------- |
@@ -297,7 +307,7 @@ This validates proper separation between network-level degradation (handled by m
 
 ---
 
-## 13. Key Observations
+## 12. Key Observations
 
 * Probe-driven remediation ensures automatic restart upon application failure.
 * Readiness isolation prevents degraded Pods from serving traffic without restarting them.
@@ -306,7 +316,7 @@ This validates proper separation between network-level degradation (handled by m
 
 ---
 
-## 14. Conclusion
+## 13. Conclusion
 
 This implementation demonstrates how Kubernetes and Istio provide complementary resilience layers:
 
@@ -315,4 +325,3 @@ This implementation demonstrates how Kubernetes and Istio provide complementary 
 * **MTTR measurements** quantify recovery efficiency and can guide SLO establishment.
 
 Together, these capabilities form a robust foundation for reliable, fault-tolerant microservice platforms.
-
