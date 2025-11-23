@@ -2,7 +2,6 @@ apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: k8-self-heal
-  namespace: monitoring
 spec:
   hosts:
   - "*"
@@ -10,12 +9,16 @@ spec:
   - k8-self-heal-gateway
   http:
   - fault:
+      delay:
+        fixedDelay: 5s
+        percentage:
+          value: 50
       abort:
         httpStatus: 503
         percentage:
           value: 50
     route:
     - destination:
-        host: k8-self-heal.monitoring.svc.cluster.local
+        host: k8-self-heal.default.svc.cluster.local
         port:
           number: 3000

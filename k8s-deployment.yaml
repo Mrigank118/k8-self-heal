@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: k8-self-heal
+  namespace: monitoring
 spec:
   replicas: 1
   selector:
@@ -11,7 +12,10 @@ spec:
     metadata:
       labels:
         app: k8-self-heal
+        release: monitoring
       annotations:
+        sidecar.istio.io/rewriteAppHTTPProbers: "true" 
+        #traffic.sidecar.istio.io/excludeInboundPorts: "3000"
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
         prometheus.io/port: "3000"
@@ -21,22 +25,26 @@ spec:
           image: mrigankwastaken/k8-self-heal:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 3000
+            - name: http
+              containerPort: 3000
           livenessProbe:
             httpGet:
               path: /healthz
               port: 3000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 5
+            failureThreshold: 3
+
           readinessProbe:
             httpGet:
-              path: /
+              path: /readyz
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
+
           startupProbe:
             httpGet:
               path: /healthz
               port: 3000
-            failureThreshold: 30
-            periodSeconds: 5
+            failureThreshold: 10
+            periodSeconds: 3

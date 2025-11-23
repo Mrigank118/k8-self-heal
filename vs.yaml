@@ -5,10 +5,21 @@ metadata:
   namespace: monitoring
 spec:
   hosts:
-  - "*"
+  - "k8-self-heal.monitoring.svc.cluster.local"
   gateways:
   - k8-self-heal-gateway
   http:
+  # Allow Prometheus metrics scraper
+  - match:
+    - uri:
+        prefix: /metrics
+    route:
+    - destination:
+        host: k8-self-heal.monitoring.svc.cluster.local
+        port:
+          number: 3000
+
+  # Apply chaos only to app traffic
   - fault:
       abort:
         httpStatus: 503

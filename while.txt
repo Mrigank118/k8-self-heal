@@ -1,0 +1,17 @@
+while true; do
+  START=$(date +%s%3N)
+  RESP=$(curl -s -w "%{http_code}" -o /tmp/resp.txt http://192.168.49.2:31369)
+  END=$(date +%s%3N)
+  DIFF=$((END - START))
+  BODY=$(cat /tmp/resp.txt | sed -n 's/<[^>]*>//g;/./p' | head -n 1)  # strip HTML tags
+
+  if [ "$RESP" -eq 503 ]; then
+    printf "\e[31m[503 FAULT] %d ms\e[0m\n" "$DIFF"
+  elif [ "$DIFF" -gt 3000 ]; then
+    printf "\e[33m[DELAY %d ms] %s\e[0m\n" "$DIFF" "$BODY"
+  else
+    printf "\e[32m[OK %d ms] %s\e[0m\n" "$DIFF" "$BODY"
+  fi
+
+  sleep 1
+done

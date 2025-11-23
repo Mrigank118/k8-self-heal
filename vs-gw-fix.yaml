@@ -1,0 +1,40 @@
+# Gateway (monitoring namespace)
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: k8-self-heal-gateway
+  namespace: monitoring
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+
+---
+# VirtualService (use FQDN for destination)
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: k8-self-heal
+  namespace: monitoring
+spec:
+  gateways:
+  - k8-self-heal-gateway
+  hosts:
+  - k8-self-heal
+  http:
+  - fault:
+      abort:
+        httpStatus: 503
+        percentage:
+          value: 50
+    route:
+    - destination:
+        host: k8-self-heal.monitoring.svc.cluster.local
+        port:
+          number: 3000

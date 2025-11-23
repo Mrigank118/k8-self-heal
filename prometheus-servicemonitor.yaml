@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: k8-self-heal-monitor
+  namespace: monitoring
+  labels:
+    release: monitoring   # must match Helm release name
+spec:
+  selector:
+    matchLabels:
+      app: k8-self-heal
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 10s
