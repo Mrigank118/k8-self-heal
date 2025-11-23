@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NAMESPACE="${NAMESPACE:-default}"
+NAMESPACE="${NAMESPACE:-monitoring}"
 LABEL_SELECTOR="${LABEL_SELECTOR:-app=k8-self-heal}"
 
 # Find the current Pod and pick the first non-istio container as the "app" container
@@ -19,7 +19,6 @@ BASE_RESTARTS="$(kubectl -n "$NAMESPACE" get pod "$POD" \
 echo "Measuring MTTR for pod=$POD container=$APP_CONTAINER (baseline restarts=$BASE_RESTARTS)"
 
 # Trigger a real failure inside the pod (app exits -> kubelet restarts)
-# If curl isn't present in the image, use your existing /crash pathway (port-forward or alternative).
 START_EPOCH_MS="$(date +%s%3N || date +%s000)"
 if ! kubectl -n "$NAMESPACE" exec "$POD" -c "$APP_CONTAINER" -- sh -lc 'curl -fsS 127.0.0.1:3000/crash || true'; then
   echo "Crash endpoint returned non-zero (expected)."
