@@ -139,7 +139,6 @@ kubectl port-forward svc/grafana 3001:80 -n monitoring
 
 ```bash
 curl localhost:3000
-curl localhost:3000/healthz
 ```
 
 ```bash
@@ -159,6 +158,8 @@ curl localhost:3000/healthz
 
 ```bash
 curl localhost:3000/notready
+```
+```bash
 curl localhost:3000/ready
 ```
 
