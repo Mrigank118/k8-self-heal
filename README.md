@@ -104,10 +104,10 @@ kubectl apply -f grafana-pvc.yaml -n monitoring
 kubectl apply -f vs.yaml -n monitoring
 kubectl apply -f vs-gw-fix.yaml -n monitoring
 kubectl apply -f mg.yaml -n monitoring
-
+```
+```
 kubectl get pods -n monitoring
 kubectl get svc -n monitoring
-
 ```
 
 Expected:
