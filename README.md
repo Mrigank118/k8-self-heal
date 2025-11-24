@@ -209,6 +209,9 @@ MTTR ≈ 28s
 > Network-level failures do **not** trigger restarts and therefore do not participate in MTTR.
 
 ---
+```
+while true; do curl -s http://localhost:3000 > /dev/null; sleep 0.1; done
+```
 
 ## 10. Fault Injection via Istio
 
